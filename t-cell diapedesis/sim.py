@@ -17,6 +17,19 @@ class Simulation:
         self.dt = 1.0
         self.noise_scale = 0.05
 
+    def _remove_if_out_of_reach(self, cell: TCell) -> bool:
+        at_downstream_end = cell.position[0] >= self.env.width - 1
+        if not at_downstream_end:
+            return False
+
+        if cell.target_anchor is not None and cell.state == CellState.ADHERED:
+            cell.target_anchor["occupied"] = max(0, cell.target_anchor["occupied"] - 1)
+
+        cell.is_active = False
+        cell.target_anchor = None
+        cell.velocity[:] = 0.0
+        return True
+
     def _create_cells(self, n: int):
         cells = []
         for _ in range(n):
@@ -39,7 +52,7 @@ class Simulation:
         force = np.zeros(2, dtype=float)
 
         for other in self.cells:
-            if other is cell:
+            if other is cell or not other.is_active:
                 continue
 
             delta = cell.position - other.position
@@ -89,6 +102,9 @@ class Simulation:
         cell.position += cell.velocity * self.dt
         cell.position = self.env.clamp_inside_vessel(cell.position)
 
+        if self._remove_if_out_of_reach(cell):
+            return
+
         # Transition condition: if close enough to the wall, start rolling
         if self.env.near_wall(cell.position, threshold=16):
             cell.state = CellState.ROLLING
@@ -133,6 +149,9 @@ class Simulation:
 
         cell.position += cell.velocity * self.dt
         cell.position = self.env.clamp_inside_vessel(cell.position)
+
+        if self._remove_if_out_of_reach(cell):
+            return
 
         # If it moves away from the wall too much, it detaches back to flowing
         if not self.env.near_wall(cell.position, threshold=20):
@@ -221,6 +240,9 @@ class Simulation:
 
     def step(self):
         for cell in self.cells:
+            if not cell.is_active:
+                continue
+
             if cell.state == CellState.FLOWING:
                 self.update_flowing(cell)
             elif cell.state == CellState.ROLLING:
@@ -232,6 +254,8 @@ class Simulation:
             elif cell.state == CellState.EXTRAVASATED:
                 self.update_extravasated(cell)
 
+        self.cells = [cell for cell in self.cells if cell.is_active]
+
 
 # ============================================================
 # VISUALIZATION
@@ -241,6 +265,7 @@ class SimulationView:
     def __init__(self, sim: Simulation):
         self.sim = sim
         self.fig, self.ax = plt.subplots(figsize=(13, 7))
+        self.anim = None
 
     def draw_environment(self):
         env = self.sim.env
@@ -345,6 +370,6 @@ class SimulationView:
         self.draw_legend_text()
 
     def animate(self):
-        anim = FuncAnimation(self.fig, self.update, interval=50, cache_frame_data=False)
+        self.anim = FuncAnimation(self.fig, self.update, interval=50, cache_frame_data=False)
         plt.show()
 

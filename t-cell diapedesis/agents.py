@@ -28,6 +28,7 @@ class TCell:
         self.chemokine_sensitivity = chemokine_sensitivity
         self.rolling_factor = rolling_factor
         self.rolling_time = 0.0
+        self.is_active = True
         self.target_anchor = None
         self.crossing_progress = 0.0
         self.radius = 5.0
